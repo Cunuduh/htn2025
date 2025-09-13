@@ -1,0 +1,15 @@
+# build artifacts
+.next
+out
+dist
+coverage
+
+# dependencies
+node_modules
+bun.lockb
+
+# logs
+*.log
+
+# assets (leave svgs unformatted for now)
+public/*.svg

@@ -1,18 +1,19 @@
 // agent role descriptors and system prompts
-export const DEFAULT_URL = "https://www.foxnews.com/us/charlie-kirk-assassination-timeline-utah-campus-shooting-details-attack-manhunt-suspect";
+export const DEFAULT_URL =
+    'https://www.foxnews.com/us/charlie-kirk-assassination-timeline-utah-campus-shooting-details-attack-manhunt-suspect';
 
 export type AgentId =
-  | "credibility"
-  | "facts_vs_interpretation"
-  | "cui_bono"
-  | "omissions"
-  | "rhetoric";
+    | 'credibility'
+    | 'facts_vs_interpretation'
+    | 'cui_bono'
+    | 'omissions'
+    | 'rhetoric';
 
 export interface AgentSpec {
-  id: AgentId;
-  name: string;
-  system: string;
-  allowSearch?: boolean; // only for fact verification pathways
+    id: AgentId;
+    name: string;
+    system: string;
+    allowSearch?: boolean; // only for fact verification pathways
 }
 
 // reading level support
@@ -20,28 +21,29 @@ export type ReadingLevel = 'standard' | 'simple';
 
 // appended guidance blocks
 const READING_LEVEL_APPENDERS: Record<ReadingLevel, string> = {
-  standard: `\n<readability>Keep sentences concise. Prefer lists over long paragraphs. Avoid filler.</readability>`,
-  simple: `\n<readability>Audience: person with limited news background. Use everyday words. Short sentences (max ~18 words). Define uncommon terms in parentheses. If something is unknown say "Not clear" instead of guessing. Prefer bullet lists. Avoid jargon.</readability>`
+    standard: `\n<readability>Keep sentences concise. Prefer lists over long paragraphs. Avoid filler.</readability>`,
+    simple: `\n<readability>Audience: person with limited news background. Use everyday words. Short sentences (max ~18 words). Define uncommon terms in parentheses. If something is unknown say "Not clear" instead of guessing. Prefer bullet lists. Avoid jargon.</readability>`,
 };
 
 export function buildAgentSystem(base: string, level: ReadingLevel): string {
-  return base + READING_LEVEL_APPENDERS[level];
+    return base + READING_LEVEL_APPENDERS[level];
 }
 
 export function buildSummarySystem(level: ReadingLevel): string {
-  const base = SUMMARY_SYSTEM_BASE;
-  const extra = level === 'simple'
-    ? `Add a line at top: Plain Verdict: (one short sentence). Use very clear words. Keep total under 160 words. Avoid abstractions.`
-    : `Keep it compact and structured for fast scanning.`;
-  return `${base}\n${extra}` + READING_LEVEL_APPENDERS[level];
+    const base = SUMMARY_SYSTEM_BASE;
+    const extra =
+        level === 'simple'
+            ? `Add a line at top: Plain Verdict: (one short sentence). Use very clear words. Keep total under 160 words. Avoid abstractions.`
+            : `Keep it compact and structured for fast scanning.`;
+    return `${base}\n${extra}` + READING_LEVEL_APPENDERS[level];
 }
 
 // agent specs
 export const AGENT_SPECS: AgentSpec[] = [
-  {
-    id: "credibility",
-    name: "Source Credibility",
-    system: `<role>Assess publication and author trust signals ONLY.</role>
+    {
+        id: 'credibility',
+        name: 'Source Credibility',
+        system: `<role>Assess publication and author trust signals ONLY.</role>
 <input_spec>You receive full article markdown (and optional factual search snippets if tool invoked).</input_spec>
 <task>Identify provenance, sourcing quality, and concrete red flags. Do NOT analyze rhetoric, omissions, emotional tone, fact vs opinion splits, or motives. If information is absent, write "Not stated". Never guess.</task>
 <output_format markdown="gfm">Produce ONLY these markdown sections and nothing else:
@@ -60,11 +62,11 @@ Bullet list of concrete sourcing or transparency issues. If none: None evident.
 <rule>If scope overlap with other agents arises, still output required headings focused on credibility only.</rule>
 </rules>
 <forbidden>Introducing new sections; moral judgments; invented sources; cross‑agent analysis.</forbidden>`,
-  },
-  {
-    id: "facts_vs_interpretation",
-    name: "Facts vs Interpretation",
-    system: `<role>Separate verifiable factual claims from interpretation or speculation ONLY.</role>
+    },
+    {
+        id: 'facts_vs_interpretation',
+        name: 'Facts vs Interpretation',
+        system: `<role>Separate verifiable factual claims from interpretation or speculation ONLY.</role>
 <exclusions>Do not judge credibility, do not analyze rhetoric/emotion, do not infer motives.</exclusions>
 <output_format markdown="gfm">Return ONLY:
 **What We Know for Sure**
@@ -80,12 +82,12 @@ Bullet list: vague / unsubstantiated / probabilistic statements needing verifica
 <rule>No redundancy; each bullet unique.</rule>
 </rules>
 <forbidden>Speculation, credibility judgments, emotional tone assessment, added sections.</forbidden>`,
-    allowSearch: true,
-  },
-  {
-    id: "cui_bono",
-    name: "Who Benefits",
-    system: `<role>Identify plausible beneficiaries or strategic interests implied by article timing/content.</role>
+        allowSearch: true,
+    },
+    {
+        id: 'cui_bono',
+        name: 'Who Benefits',
+        system: `<role>Identify plausible beneficiaries or strategic interests implied by article timing/content.</role>
 <exclusions>Do not restate raw fact inventory (other agents). Do not perform emotional/rhetorical analysis. Avoid conspiracy framing.</exclusions>
 <output_format markdown="gfm">Output ONLY:
 **Who Wins**
@@ -100,11 +102,11 @@ Bullet list: potential strategic angles explicitly suggested or strongly implied
 <rule>No additional commentary or sections.</rule>
 </rules>
 <forbidden>Factual claim re-listing, emotional tone critique, speculative conspiracy narratives.</forbidden>`,
-  },
-  {
-    id: "omissions",
-    name: "What's Missing",
-    system: `<role>Identify missing data, absent viewpoints, and omitted contextual background aiding interpretation.</role>
+    },
+    {
+        id: 'omissions',
+        name: "What's Missing",
+        system: `<role>Identify missing data, absent viewpoints, and omitted contextual background aiding interpretation.</role>
 <exclusions>Do not judge tone (rhetoric) or overall trust (credibility).</exclusions>
 <output_format markdown="gfm">Return ONLY:
 **Missing Facts**
@@ -119,12 +121,12 @@ Bullet list: historical / comparative / legal context whose absence limits under
 <rule>No narrative outside bullet lists.</rule>
 </rules>
 <forbidden>Tone critique, credibility judgments, speculative motives.</forbidden>`,
-    allowSearch: true,
-  },
-  {
-    id: "rhetoric",
-    name: "Emotional Tricks",
-    system: `<role>Analyze persuasive and emotional framing only.</role>
+        allowSearch: true,
+    },
+    {
+        id: 'rhetoric',
+        name: 'Emotional Tricks',
+        system: `<role>Analyze persuasive and emotional framing only.</role>
 <exclusions>Do not classify factual accuracy, credibility, omissions, or beneficiaries.</exclusions>
 <output_format markdown="gfm">Produce ONLY:
 **Emotional Language**
@@ -139,7 +141,7 @@ Bullet list: bias techniques (loaded question, false balance, insinuation, repet
 <rule>Stay strictly within emotional/persuasive scope.</rule>
 </rules>
 <forbidden>Adding new sections; judging credibility; detailing omissions; motive speculation.</forbidden>`,
-  },
+    },
 ];
 
 // summary system base
