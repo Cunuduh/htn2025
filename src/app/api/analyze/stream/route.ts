@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { anthropic } from '@ai-sdk/anthropic';
-import { streamText } from 'ai';
-import { AGENT_SPECS, DEFAULT_URL, SUMMARY_SYSTEM } from '@/lib/agents';
+import { streamText, generateObject } from 'ai';
+import { AGENT_SPECS, DEFAULT_URL, buildAgentSystem, buildSummarySystem, ReadingLevel } from '@/lib/agents';
 import { hasAnthropicKey } from '@/lib/env';
 import { fetchFirecrawlMarkdown } from '@/lib/firecrawl';
+import { z } from 'zod';
 
 // Using Firecrawl SDK which may require Node.js runtime rather than edge.
 export const runtime = 'nodejs';
@@ -18,9 +19,20 @@ function sseEncoder() {
 	};
 }
 
+const TRUST_SCHEMA = z.object({
+  trustLevel: z.enum(['high','medium','low','uncertain']).describe('Overall trust assessment bucket.'),
+  plainVerdict: z.string().describe('One short sentence everyday-language verdict (<= 20 words).'),
+  mainConcerns: z.array(z.string()).max(5).describe('Key concerns or red flags, short phrases.'),
+  toVerify: z.array(z.string()).max(6).describe('Concrete things a reader should check elsewhere.'),
+  notes: z.string().optional().describe('Optional extra nuance if needed.')
+});
+
+type TrustObject = z.infer<typeof TRUST_SCHEMA>;
+
 export async function POST(req: NextRequest) {
 	const body = await req.json().catch(() => ({}));
 	const url = (body?.url as string) || DEFAULT_URL;
+  const readingLevel: ReadingLevel = (body?.readingLevel === 'simple' ? 'simple' : 'standard');
 	const apiKeyPresent = hasAnthropicKey();
 
 	const stream = new ReadableStream<Uint8Array>({
@@ -28,7 +40,7 @@ export async function POST(req: NextRequest) {
 			const enc = sseEncoder();
 			function send(obj: Record<string, unknown>) { controller.enqueue(enc.encode(obj)); }
 
-			send({ type: 'start', url, hasKey: apiKeyPresent });
+			send({ type: 'start', url, hasKey: apiKeyPresent, readingLevel });
 
 			if (!apiKeyPresent) {
 				// mock outputs
@@ -36,8 +48,8 @@ export async function POST(req: NextRequest) {
 					send({ type: 'agentChunk', id: spec.id, name: spec.name, delta: `**mock output** (no key) for ${spec.name}` });
 					send({ type: 'agentDone', id: spec.id });
 				}
-				send({ type: 'summaryChunk', delta: '**mock summary** add ANTHROPIC_API_KEY to enable live analysis.' });
-				send({ type: 'summaryDone' });
+        // mock structured summary object
+        send({ type: 'summaryObject', object: { trustLevel: 'uncertain', plainVerdict: 'Mock verdict (no key).', mainConcerns: ['Add API key'], toVerify: ['Add ANTHROPIC_API_KEY env var'], notes: 'Structured summary disabled in mock.' } });
 				send({ type: 'done' });
 				controller.close();
 				return;
@@ -80,15 +92,16 @@ export async function POST(req: NextRequest) {
 						'Use ONLY that content (plus optional factual web_search queries) as evidence.',
 						`If you believe content is missing, first restate what you have; do NOT claim absence unless clearly absent.`,
 						'Specialize according to your system role; output well-structured GitHub-flavored markdown.',
-                        'Be concise, avoid being personable and do not try to follow up or use pleasantries, just do the task as instructed.',
+              'Keep to your requested headings. No fluffy language.',
 						'</context_instructions>',
 						xmlWrappedArticle,
 					].join('\n');
+					const system = buildAgentSystem(spec.system, readingLevel);
 					const promptLength = prompt.length;
-					console.log('[analyze/stream] agent begin', { agent: spec.id, name: spec.name, promptLength, systemRoleChars: spec.system.length });
+					console.log('[analyze/stream] agent begin', { agent: spec.id, name: spec.name, promptLength, systemRoleChars: system.length, readingLevel });
 					const result = await streamText({
 						model: anthropic('claude-3-5-haiku-20241022'),
-						system: spec.system,
+						system,
 						tools: { web_search: webSearch } as any,
 						maxRetries: 1,
 						messages: [
@@ -114,25 +127,26 @@ export async function POST(req: NextRequest) {
 			await Promise.allSettled(agentPromises);
 			send({ type: 'agentsComplete' });
 
-			// Summary (waits for all agents)
-			send({ type: 'summaryStart' });
+			// Structured Summary (generateObject, no streaming currently for simplicity)
 			try {
-				const summaryPrompt = `<context_instructions>Integrate specialist analyses below. Be concise, avoid redundancy, preserve factual nuance.</context_instructions>\n${agentOutputs.map(a => `\n<agent id="${a.id}">\n<![CDATA[\n${a.markdown}\n]]>\n</agent>`).join('')}`;
-				const summaryResult = await streamText({
-					model: anthropic('claude-3-7-sonnet-latest'),
-					system: SUMMARY_SYSTEM,
-					messages: [ { role: 'user', content: summaryPrompt } ],
-				});
-				for await (const rawPart of summaryResult.textStream as any) {
-					const part: any = rawPart;
-					if (typeof part === 'string') send({ type: 'summaryChunk', delta: part });
-					else if (part?.type === 'text-delta') send({ type: 'summaryChunk', delta: part.text });
-					else if (part?.type === 'error') send({ type: 'summaryError', error: part.error });
-				}
-				send({ type: 'summaryDone' });
+        const summarySystem = buildSummarySystem(readingLevel);
+        const summaryPrompt = `Integrate specialist analyses below. Provide unbiased, concise output respecting schema.\n${agentOutputs.map(a => `\n<agent id="${a.id}">\n<![CDATA[\n${a.markdown}\n]]>\n</agent>`).join('')}`;
+				const genObj: any = generateObject as any; // loose typing fallback due to build-time inference issue
+				const summaryResult: any = await genObj({
+							model: anthropic('claude-3-7-sonnet-latest'),
+							system: summarySystem,
+							schema: TRUST_SCHEMA,
+							messages: [ { role: 'user', content: summaryPrompt } ],
+							maxRetries: 1,
+						});
+						const object = summaryResult?.object as TrustObject | undefined;
+						if (object) {
+							send({ type: 'summaryObject', object });
+        } else {
+          send({ type: 'summaryError', error: 'no_summary_object' });
+        }
 			} catch (e) {
 				send({ type: 'summaryError', error: (e as Error).message });
-				send({ type: 'summaryDone' });
 			}
 
 			send({ type: 'done' });

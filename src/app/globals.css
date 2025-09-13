@@ -137,3 +137,6 @@
   .markdown th, .markdown td { border:1px solid #303030; }
   .markdown pre code { background: transparent; padding:0; }
   .markdown pre { line-height:1.35; }
+
+  @keyframes spin-slow { to { transform: rotate(360deg); } }
+  .animate-spin-slow { animation: spin-slow 12s linear infinite; }
