@@ -1,3 +1,102 @@
+## anti-disinformation article analysis
+
+parallel multi-agent article decomposition using next.js (app router) + bun + shadcn/ui + vercel ai sdk anthropic provider.
+
+### features
+- five specialized analysis agents executed in parallel (credibility, facts vs interpretation, cui bono, omissions, rhetoric)
+- synthesis summary using a higher depth model
+- dark minimal ui with horizontal snap carousel
+- markdown rendering of each agent output
+- external article retrieval via Firecrawl API (https://firecrawl.dev) converting the target URL to markdown prior to multi-agent analysis
+ - manual start (no auto-run) + explicit red Stop (abort) button using AbortController
+ - live search activity cards (one per outgoing web search) with status pulse → done indicator
+ - adaptive carousel sizing + keyboard navigation (←/→)
+ - graceful abort (no error flash on intentional cancel)
+ - (pending small UX niceties being added): persisted last URL, Retry button on abort/error, collapsible summary card, full query tooltips
+
+### environment
+1. Copy `.env.example` to `.env.local` (this file is gitignored).
+2. Put your real Anthropic & Firecrawl key values:
+
+```
+ANTHROPIC_API_KEY=sk_live_your_real_key
+FIRECRAWL_API_KEY=fc_live_your_firecrawl_key
+```
+
+3. Restart the dev server after adding or changing env vars.
+
+Security / hygiene:
+- Never commit real keys. `.env.example` should only contain placeholders.
+- If a real key was ever committed, rotate it immediately in the Anthropic console.
+- In production (e.g. Vercel) add `ANTHROPIC_API_KEY` via the dashboard Environment Variables UI; no code change needed.
+
+### development
+
+```
+bun install
+bun run dev
+```
+
+visit http://localhost:3000
+
+Workflow:
+1. Paste article URL → Analyze.
+2. During processing you may Stop to instantly abort downstream model calls.
+3. Each agent card streams markdown; summary appears after agents complete.
+4. Search cards show evidence gathering queries in real time.
+
+Planned minor enhancements (tracked in codebase TODOs):
+- Persist last used URL (localStorage) so refresh keeps context.
+- Retry button when analysis aborted or failed.
+- Collapsible summary (hide/show body to reduce vertical scroll).
+- Hover tooltip on truncated search queries.
+
+These are incremental and do not affect the streaming protocol.
+
+### api
+Streaming endpoint: `POST /api/analyze/stream` body: `{ "url": "https://example.com/article" }`
+Returns Server-Sent Events (text/event-stream). Event `type` values:
+
+```
+start            { url, hasKey }
+article          { bytes }
+articleError     { message }
+agentStart       { id }
+agentChunk       { id, delta }
+agentError       { id, error }
+agentDone        { id }
+agentsComplete   {}
+searchStart      { agent, query }
+summaryStart     {}
+summaryChunk     { delta }
+summaryError     { error }
+summaryDone      {}
+done             {}
+```
+Client accumulates deltas to build agent content & summary.
+
+Non-stream JSON route deprecated in favor of unified streaming. Agents now execute in PARALLEL; only the summary waits for all agent outputs.
+
+Prompt structure improvements:
+- Article markdown wrapped as XML: `<article_markdown><![CDATA[ ... ]]></article_markdown>` for unambiguous delimitation.
+- Agents receive additional `<context_instructions>` block guiding evidence use and discouraging false "missing context" claims.
+
+### mock fallback
+If `ANTHROPIC_API_KEY` is absent the streaming route emits deterministic mock markdown chunks for each agent plus a mock summary. This lets the UI be demonstrated without incurring API usage. (Legacy non‑stream route removed.)
+
+Client logic already handles this transparently; no special flag is required beyond the existing event sequence.
+
+### notes
+- upgrade @ai-sdk/anthropic when native web tools types are exposed; then wire anthropic.tools.webFetch_20250910 alongside webSearch_20250305 for selective fact checking.
+- production hardening: pre-fetch article server-side, chunk & pass extracted readable text to reduce external fetch variability.
+ - article content retrieved via Firecrawl extract endpoint (markdown format). Consider adding caching (KV / Redis) for rate & latency optimization.
+
+### license
+mit
+
+---
+below is the default create-next-app reference material:
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

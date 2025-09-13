@@ -20,6 +20,14 @@ const eslintConfig = [
       "next-env.d.ts",
     ],
   },
+  {
+    rules: {
+      // Allow explicit any for rapid prototyping / hackathon speed.
+      '@typescript-eslint/no-explicit-any': 'off',
+      // Allow ts-ignore usage.
+      '@typescript-eslint/ban-ts-comment': ['error', { 'ts-ignore': false }],
+    },
+  },
 ];
 
 export default eslintConfig;
