@@ -11,14 +11,20 @@ function required(name: string): string {
 }
 
 export const Env = {
-  anthropicKey: () => process.env.ANTHROPIC_API_KEY || '',
-  requireAnthropicKey: () => required('ANTHROPIC_API_KEY'),
+  cerebrasKey: () => process.env.CEREBRAS_API_KEY || '',
+  requireCerebrasKey: () => required('CEREBRAS_API_KEY'),
+  exaKey: () => process.env.EXA_API_KEY || '',
+  requireExaKey: () => required('EXA_API_KEY'),
   firecrawlKey: () => process.env.FIRECRAWL_API_KEY || '',
   requireFirecrawlKey: () => required('FIRECRAWL_API_KEY'),
 };
 
-export function hasAnthropicKey(): boolean {
-  return !!process.env.ANTHROPIC_API_KEY;
+export function hasCerebrasKey(): boolean {
+  return !!process.env.CEREBRAS_API_KEY;
+}
+
+export function hasExaKey(): boolean {
+  return !!process.env.EXA_API_KEY;
 }
 
 export function hasFirecrawlKey(): boolean {

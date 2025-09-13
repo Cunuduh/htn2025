@@ -19,7 +19,7 @@ export default function Home() {
   const [agents, setAgents] = useState<AgentResult[]>([]);
   const [summaryMarkdown, setSummaryMarkdown] = useState(''); // legacy fallback if text summary ever used
   const [summaryObject, setSummaryObject] = useState<TrustSummary | null>(null);
-  const [searchEvents, setSearchEvents] = useState<{ agent: string; query: string; ts: number; done?: boolean }[]>([]);
+  const [searchEvents, setSearchEvents] = useState<{ agent: string; query: string; ts: number; done?: boolean; sources?: { url: string; title: string; page_age?: string; encrypted_content?: string }[] }[]>([]);
   const [aborted, setAborted] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const [active, setActive] = useState(0);
@@ -44,6 +44,9 @@ export default function Home() {
   const [summaryDone, setSummaryDone] = useState(false);
   const [autoScrollAgents, setAutoScrollAgents] = useState<Record<string, boolean>>({});
   const [readingLevel, setReadingLevel] = useState<ReadingLevel>('standard');
+  // Track completion per agent so we can show a summary skeleton immediately when all finish.
+  const [doneAgents, setDoneAgents] = useState<Record<string, true>>({});
+  const allAgentsDone = AGENT_SPECS.every(a => doneAgents[a.id]);
 
   function resetState() {
     setAgents([]);
@@ -53,6 +56,7 @@ export default function Home() {
     setAborted(false);
     setSummaryStarted(false);
     setSummaryDone(false);
+    setDoneAgents({});
   }
 
   async function analyze(e?: React.FormEvent) {
@@ -63,6 +67,9 @@ export default function Home() {
     const controller = new AbortController();
     setStarted(true);
     abortRef.current = controller;
+    // Hoisted so finally block can always reference populated agents
+    const agentMap: Record<string, AgentResult> = {};
+    const commitAgents = () => setAgents(Object.values(agentMap));
     try {
       const res = await fetch('/api/analyze/stream', {
         method: 'POST',
@@ -74,8 +81,6 @@ export default function Home() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      const agentMap: Record<string, AgentResult> = {};
-      const commitAgents = () => setAgents(Object.values(agentMap));
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -109,8 +114,33 @@ export default function Home() {
               setSearchEvents(s => [...s, { agent: evt.agent, query: evt.query, ts: Date.now() }]);
               break;
             }
+            case 'searchResult': {
+              // Attach sources to matching (agent,query) entry (most recent without sources yet)
+              setSearchEvents(s => {
+                const copy = [...s];
+                for (let i = copy.length - 1; i >= 0; i--) {
+                  const ev = copy[i];
+                  if (ev.agent === evt.agent && ev.query === evt.query && !ev.sources) {
+                    copy[i] = { ...ev, sources: evt.sources, done: true };
+                    break;
+                  }
+                }
+                // Fallback: if no existing start event (edge case), push one complete.
+                if (!copy.some(ev => ev.agent === evt.agent && ev.query === evt.query)) {
+                  copy.push({ agent: evt.agent, query: evt.query, ts: Date.now(), done: true, sources: evt.sources });
+                }
+                return copy;
+              });
+              break;
+            }
             case 'agentDone': {
+              if (agentMap[evt.id] && !agentMap[evt.id].markdown.trim()) {
+                // Agent produced no output; mark placeholder
+                agentMap[evt.id].markdown = '**No response** – agent finished with no output.';
+                commitAgents();
+              }
               setSearchEvents(s => s.map(ev => ev.agent === evt.id ? { ...ev, done: true } : ev));
+              setDoneAgents(m => ({ ...m, [evt.id]: true }));
               break;
             }
             case 'summaryChunk': { // legacy support
@@ -141,6 +171,22 @@ export default function Home() {
         setError(err instanceof Error ? err.message : 'error');
       }
     } finally {
+      // Ensure all declared agents have a visible card with at least placeholder text.
+      for (const spec of AGENT_SPECS) {
+        if (!agentMap[spec.id]) {
+          agentMap[spec.id] = {
+            id: spec.id,
+            name: spec.name,
+            markdown: aborted ? '**No response** – analysis aborted before agent started.' : '**No response** – agent did not start.'
+          };
+        } else if (!agentMap[spec.id].markdown.trim()) {
+          agentMap[spec.id].markdown = aborted
+            ? '**No response** – analysis aborted before agent replied.'
+            : '**No response** – agent failed or was rate limited.';
+        }
+        setDoneAgents(m => ({ ...m, [spec.id]: true }));
+      }
+      setAgents(Object.values(agentMap));
       setLoading(false);
     }
   }
@@ -196,7 +242,20 @@ export default function Home() {
 
   useEffect(() => {
     const el = containerRef.current; if (!el) return;
-    function onWheel(e: WheelEvent) { if (!count) return; const dominant = Math.abs(e.deltaX) >= Math.abs(e.deltaY) ? e.deltaX : e.deltaY; if (Math.abs(dominant) < 4) return; e.preventDefault(); const now = performance.now(); if (now < wheelLockRef.current) return; wheelLockRef.current = now + 120; if (dominant > 0) setActive(a => Math.min(count - 1, a + 1)); else if (dominant < 0) setActive(a => Math.max(0, a - 1)); }
+    function onWheel(e: WheelEvent) {
+      if (!count) return;
+      // Only treat as carousel navigation if horizontal intent is clear.
+      const absX = Math.abs(e.deltaX);
+      const absY = Math.abs(e.deltaY);
+      // Require horizontal to dominate by a factor; ignore mostly vertical scroll (trackpad swipes).
+      if (absX < 4 || absX < absY * 1.2) return; // horizontal must be at least ~20% greater than vertical
+      e.preventDefault();
+      const now = performance.now();
+      if (now < wheelLockRef.current) return;
+      wheelLockRef.current = now + 140; // slight increase for smoother feel
+      if (e.deltaX > 0) setActive(a => Math.min(count - 1, a + 1));
+      else if (e.deltaX < 0) setActive(a => Math.max(0, a - 1));
+    }
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, [count]);
@@ -286,13 +345,7 @@ export default function Home() {
         </div>
         {started && Form}
         {started && error && <p className="text-sm text-red-400">{error}</p>}
-        {started && !!searchEvents.length && (
-          <div className="flex flex-wrap gap-3">
-            {searchEvents.slice(-12).map((s,i) => (
-              <SearchCard key={i} agent={s.agent} query={s.query} done={s.done} />
-            ))}
-          </div>
-        )}
+        {/* per-agent search events now rendered inside cards */}
       </header>
       <main className={`flex-1 flex flex-col gap-10 pb-16 ${!started ? 'items-center justify-center' : ''}`}>
         {!started && !loading && (
@@ -342,7 +395,9 @@ export default function Home() {
                 className="absolute top-1/2 left-0 -translate-y-1/2 flex gap-[40px] transition-transform duration-500 ease-out will-change-transform"
                 style={{ transform: `translateX(${translate}px)`, transition: dragState.current.active ? 'none' : undefined }}
               >
-                {visibleAgents.map((card, idx) => (
+                {visibleAgents.map((card, idx) => {
+                  const agentSearches = searchEvents.filter(se => se.agent === card.id);
+                  return (
                   <div
                     key={card.id}
                     data-card
@@ -350,17 +405,16 @@ export default function Home() {
                     style={{ width: CARD_WIDTH }}
                     onClick={() => setActive(idx)}
                   >
-                    {card.markdown ? (
-                      <AnalysisCard
-                        agent={card}
-                        color={RAINBOW[idx % RAINBOW.length]}
-                        active={idx === active}
-                        autoScroll={autoScrollAgents[card.id] !== false}
-                        onAutoScrollToggle={(enabled) => setAutoScrollAgents(m => ({ ...m, [card.id]: enabled }))}
-                      />
-                    ) : (started && loading ? <SkeletonCard title={card.name} color={RAINBOW[idx % RAINBOW.length]} /> : null)}
+                    <AnalysisCard
+                      agent={card}
+                      color={RAINBOW[idx % RAINBOW.length]}
+                      active={idx === active}
+                      autoScroll={autoScrollAgents[card.id] !== false}
+                      onAutoScrollToggle={(enabled) => setAutoScrollAgents(m => ({ ...m, [card.id]: enabled }))}
+                      searches={agentSearches}
+                    />
                   </div>
-                ))}
+                );})}
               </div>
             </div>
             {count > 1 && (
@@ -390,10 +444,10 @@ export default function Home() {
           </div>
         </section>
         )}
-        {(summaryObject || summaryMarkdown || summaryStarted) && (
+        {(summaryObject || summaryMarkdown || summaryStarted || allAgentsDone) && (
           <section ref={summaryRef} className="w-full px-6">
             <div className="max-w-5xl mx-auto">
-              <Card className="bg-neutral-900 border-neutral-700 w-full">
+              <Card className="bg-neutral-900 border-neutral-700 w-full overflow-hidden relative">
                 <CardHeader>
                   <CardTitle className="text-lg text-neutral-50 flex items-center gap-3">Verdict & Trust
                     {summaryObject && (
@@ -428,14 +482,60 @@ export default function Home() {
                       )}
                       <div className="pt-2 border-t border-neutral-700 text-xs text-neutral-500">This assistive summary may be imperfect. Always compare with at least one other reputable source.</div>
                     </div>
-                  ) : (
-                    summaryMarkdown ? <Markdown>{summaryMarkdown}</Markdown> : (
-                      <div className="space-y-3 animate-pulse">
-                        <div className="h-4 bg-neutral-800 rounded w-2/3" />
-                        <div className="h-4 bg-neutral-800 rounded w-5/6" />
-                        <div className="h-4 bg-neutral-800 rounded w-1/2" />
+                  ) : summaryMarkdown ? (
+                    <Markdown>{summaryMarkdown}</Markdown>
+                  ) : allAgentsDone ? (
+                    // Simplified large skeleton: only text lines & bullet dots (no panels/cards/buttons)
+                    <div className="relative w-full h-[600px] flex flex-col gap-10 overflow-hidden">
+                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(255,255,255,0.07),transparent_70%)] pointer-events-none" />
+                      <div className="pt-4 space-y-6">
+                        <div className="space-y-4">
+                          <div className="h-8 w-3/5 shimmer-block" />
+                          <div className="h-5 w-2/5 shimmer-line" />
+                        </div>
+                        <div className="space-y-3">
+                          {Array.from({ length: 14 }).map((_,i)=>(
+                            <div key={i} className="h-4 shimmer-line" style={{ width: `${92 - (i%5)*8}%` }} />
+                          ))}
+                        </div>
+                        <div className="space-y-5 mt-4">
+                          <div className="h-5 w-48 shimmer-block" />
+                          <ul className="space-y-3">
+                            {Array.from({ length: 8 }).map((_,i)=>(
+                              <li key={i} className="flex items-start gap-3">
+                                <span className="h-3 w-3 shimmer-dot rounded-full mt-1" />
+                                <span className="flex-1 h-4 shimmer-line rounded" style={{ width: `${88 - (i*6)%40}%` }} />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="space-y-5 mt-6">
+                          <div className="h-5 w-56 shimmer-block" />
+                          <div className="space-y-3">
+                            {Array.from({ length: 10 }).map((_,i)=>(
+                              <div key={i} className="h-4 shimmer-line" style={{ width: `${96 - (i*5)%50}%` }} />
+                            ))}
+                          </div>
+                        </div>
+                        <div className="space-y-4 mt-8">
+                          <div className="h-5 w-40 shimmer-block" />
+                          <ul className="space-y-3">
+                            {Array.from({ length: 6 }).map((_,i)=>(
+                              <li key={i} className="flex items-start gap-3">
+                                <span className="h-3 w-3 shimmer-dot rounded-full mt-1" />
+                                <span className="flex-1 h-4 shimmer-line rounded" style={{ width: `${90 - (i*7)%35}%` }} />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       </div>
-                    )
+                    </div>
+                  ) : (
+                    <div className="space-y-3 animate-pulse">
+                      <div className="h-4 bg-neutral-800 rounded w-2/3" />
+                      <div className="h-4 bg-neutral-800 rounded w-5/6" />
+                      <div className="h-4 bg-neutral-800 rounded w-1/2" />
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -447,7 +547,7 @@ export default function Home() {
   );
 }
 
-function AnalysisCard({ agent, color, active, autoScroll, onAutoScrollToggle }: { agent: AgentResult; color?: string; active: boolean; autoScroll: boolean; onAutoScrollToggle: (enabled: boolean) => void }) {
+function AnalysisCard({ agent, color, active, autoScroll, onAutoScrollToggle, searches }: { agent: AgentResult; color?: string; active: boolean; autoScroll: boolean; onAutoScrollToggle: (enabled: boolean) => void; searches: { agent: string; query: string; ts: number; done?: boolean; sources?: { url: string; title: string; page_age?: string; encrypted_content?: string }[] }[] }) {
   const base = color || '#7b5bff';
   const siteBg = '#0a0a0a';
   const background = active
@@ -459,7 +559,7 @@ function AnalysisCard({ agent, color, active, autoScroll, onAutoScrollToggle }: 
   const bodyText = active ? 'text-neutral-200' : 'text-neutral-500';
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => { if (!autoScroll) return; const el = scrollRef.current; if (!el) return; el.scrollTop = el.scrollHeight; }, [agent.markdown, autoScroll]);
+  useEffect(() => { if (!autoScroll) return; const el = scrollRef.current; if (!el) return; el.scrollTop = el.scrollHeight; }, [agent.markdown, searches.length, autoScroll]);
 
   function handleScroll() { const el = scrollRef.current; if (!el) return; const threshold = 24; const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold; if (atBottom && !autoScroll) { onAutoScrollToggle(true); } else if (!atBottom && autoScroll) { onAutoScrollToggle(false); } }
   return (
@@ -475,12 +575,42 @@ function AnalysisCard({ agent, color, active, autoScroll, onAutoScrollToggle }: 
         </CardTitle>
       </CardHeader>
       <CardContent ref={scrollRef} onScroll={handleScroll} className={`overflow-y-auto pr-2 text-sm leading-relaxed space-y-3 custom-scroll prose prose-invert max-w-none ${bodyText}`}>
+        {!!searches.length && (
+          <div className="space-y-3">
+            <div className="text-[11px] uppercase tracking-wide text-neutral-400 font-medium">Searches</div>
+            <ul className="space-y-3">
+              {searches.map((s,i) => (
+                <li key={s.ts + '-' + i} className="text-xs text-neutral-300 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-block h-2 w-2 rounded-full ${s.done ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+                    <span className="truncate font-medium" title={s.query}>{s.query}</span>
+                  </div>
+                  {!!s.sources?.length && (
+                    <ul className="pl-4 mt-1 space-y-1 list-none">
+                      {s.sources.map((src, j) => (
+                        <li key={j} className="flex flex-col gap-0.5">
+                          <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-neutral-200 hover:underline truncate" title={src.title || src.url}>{src.title || src.url}</a>
+                          <div className="flex flex-wrap gap-2 text-[10px] text-neutral-500">
+                            {src.page_age && <span>{src.page_age}</span>}
+                            {src.encrypted_content && <span className="italic opacity-70">enc</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-neutral-700/50 pt-2" />
+          </div>
+        )}
         <Markdown>{agent.markdown}</Markdown>
       </CardContent>
     </Card>
   );
 }
 
+/* SkeletonCard no longer used (cards always visible) */
 function SkeletonCard({ title, color }: { title: string; color?: string }) {
   const base = color || '#7b5bff';
   const gradient = `radial-gradient(circle at 50% 0%, ${base}30 0%, ${base}1f 22%, #0a0a0a 70%)`;

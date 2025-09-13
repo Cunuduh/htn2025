@@ -140,3 +140,32 @@
 
   @keyframes spin-slow { to { transform: rotate(360deg); } }
   .animate-spin-slow { animation: spin-slow 12s linear infinite; }
+
+  /* Shimmer & skeleton animations for summary placeholder */
+  @keyframes shimmer-move {
+    0% { transform: translateX(-60%); }
+    100% { transform: translateX(120%); }
+  }
+  @keyframes pulse-soft {
+    0%,100% { opacity: 0.55; }
+    50% { opacity: 0.85; }
+  }
+  .shimmer-line, .shimmer-block, .shimmer-button, .shimmer-dot, .shimmer-panel {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.05) 100%);
+    background-size: 300% 100%;
+    animation: pulse-soft 2.8s ease-in-out infinite;
+  }
+  .shimmer-panel::after, .shimmer-line::after, .shimmer-block::after, .shimmer-button::after, .shimmer-dot::after {
+    content: "";
+    position: absolute; inset:0;
+    background: linear-gradient(110deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.28) 45%, rgba(255,255,255,0) 80%);
+    animation: shimmer-move 2.2s linear infinite;
+    mix-blend-mode: screen;
+  }
+  .shimmer-button { border:1px solid rgba(255,255,255,0.15); }
+  .shimmer-dot { width:12px; height:12px; border-radius:9999px; }
+  .shimmer-line { border-radius: 6px; }
+  .shimmer-block { border-radius: 10px; }
+  .shimmer-panel { filter: saturate(130%); }

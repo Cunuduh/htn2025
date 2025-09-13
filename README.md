@@ -1,6 +1,6 @@
 ## anti-disinformation article analysis
 
-parallel multi-agent article decomposition using next.js (app router) + bun + shadcn/ui + vercel ai sdk anthropic provider.
+parallel multi-agent article decomposition using next.js (app router) + bun + shadcn/ui + vercel ai sdk cerebras provider + exa web search tool.
 
 ### features
 - five specialized analysis agents executed in parallel (credibility, facts vs interpretation, cui bono, omissions, rhetoric)
@@ -16,10 +16,12 @@ parallel multi-agent article decomposition using next.js (app router) + bun + sh
 
 ### environment
 1. Copy `.env.example` to `.env.local` (this file is gitignored).
-2. Put your real Anthropic & Firecrawl key values:
+2. Put your real Cerebras, Exa & Firecrawl key values:
 
 ```
-ANTHROPIC_API_KEY=sk_live_your_real_key
+"# example env file" 
+CEREBRAS_API_KEY=sk_cerebras_real_key_here
+EXA_API_KEY=exa_real_key_here
 FIRECRAWL_API_KEY=fc_live_your_firecrawl_key
 ```
 
@@ -27,8 +29,8 @@ FIRECRAWL_API_KEY=fc_live_your_firecrawl_key
 
 Security / hygiene:
 - Never commit real keys. `.env.example` should only contain placeholders.
-- If a real key was ever committed, rotate it immediately in the Anthropic console.
-- In production (e.g. Vercel) add `ANTHROPIC_API_KEY` via the dashboard Environment Variables UI; no code change needed.
+- If a real key was ever committed, rotate it immediately in the Cerebras or Exa dashboards.
+- In production (e.g. Vercel) add `CEREBRAS_API_KEY`, `EXA_API_KEY`, `FIRECRAWL_API_KEY` via the dashboard Environment Variables UI; no code change needed.
 
 ### development
 
@@ -82,12 +84,12 @@ Prompt structure improvements:
 - Agents receive additional `<context_instructions>` block guiding evidence use and discouraging false "missing context" claims.
 
 ### mock fallback
-If `ANTHROPIC_API_KEY` is absent the streaming route emits deterministic mock markdown chunks for each agent plus a mock summary. This lets the UI be demonstrated without incurring API usage. (Legacy non‑stream route removed.)
+If `CEREBRAS_API_KEY` is absent the streaming route emits deterministic mock markdown chunks for each agent plus a mock summary. This lets the UI be demonstrated without incurring API usage. (Legacy non‑stream route removed.)
 
 Client logic already handles this transparently; no special flag is required beyond the existing event sequence.
 
 ### notes
-- upgrade @ai-sdk/anthropic when native web tools types are exposed; then wire anthropic.tools.webFetch_20250910 alongside webSearch_20250305 for selective fact checking.
+- web search powered by Exa (via custom tool) when `EXA_API_KEY` present; agents lacking search permission skip tool usage.
 - production hardening: pre-fetch article server-side, chunk & pass extracted readable text to reduce external fetch variability.
  - article content retrieved via Firecrawl extract endpoint (markdown format). Consider adding caching (KV / Redis) for rate & latency optimization.
 
