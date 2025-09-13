@@ -15,11 +15,10 @@ export interface AgentSpec {
   allowSearch?: boolean; // only for fact verification pathways
 }
 
-// --- Reading level support ---
+// reading level support
 export type ReadingLevel = 'standard' | 'simple';
 
-// Guidance blocks appended to system prompts depending on reading level.
-// Intentionally minimal to avoid diluting each agent's role instructions.
+// appended guidance blocks
 const READING_LEVEL_APPENDERS: Record<ReadingLevel, string> = {
   standard: `\n<readability>Keep sentences concise. Prefer lists over long paragraphs. Avoid filler.</readability>`,
   simple: `\n<readability>Audience: person with limited news background. Use everyday words. Short sentences (max ~18 words). Define uncommon terms in parentheses. If something is unknown say "Not clear" instead of guessing. Prefer bullet lists. Avoid jargon.</readability>`
@@ -37,7 +36,7 @@ export function buildSummarySystem(level: ReadingLevel): string {
   return `${base}\n${extra}` + READING_LEVEL_APPENDERS[level];
 }
 
-// concise specialized system prompts
+// agent specs
 export const AGENT_SPECS: AgentSpec[] = [
   {
     id: "credibility",
@@ -143,6 +142,6 @@ Bullet list: bias techniques (loaded question, false balance, insinuation, repet
   },
 ];
 
-// Keep original export name but refactor into BASE for builder usage
+// summary system base
 const SUMMARY_SYSTEM_BASE = `Give a short, clear verdict for someone who doesn't follow news closely. Rate trustworthiness, highlight biggest concerns, explain what to double-check. Keep under 300 words total. Format: **Trust Level**, **Main Concerns**, **What to Verify**.`;
 export const SUMMARY_SYSTEM = SUMMARY_SYSTEM_BASE; // backward compatibility

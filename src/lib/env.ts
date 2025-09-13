@@ -1,6 +1,4 @@
-// Centralized environment variable access & validation.
-// In edge/runtime contexts (Next.js), process.env is still available for static keys at build time.
-// For dynamic checks keep minimal logic.
+// env var access helpers
 
 function required(name: string): string {
   const v = process.env[name];
@@ -19,14 +17,8 @@ export const Env = {
   requireFirecrawlKey: () => required('FIRECRAWL_API_KEY'),
 };
 
-export function hasCerebrasKey(): boolean {
-  return !!process.env.CEREBRAS_API_KEY;
-}
+export function hasCerebrasKey(): boolean { return !!process.env.CEREBRAS_API_KEY; }
 
-export function hasExaKey(): boolean {
-  return !!process.env.EXA_API_KEY;
-}
+export function hasExaKey(): boolean { return !!process.env.EXA_API_KEY; }
 
-export function hasFirecrawlKey(): boolean {
-  return !!process.env.FIRECRAWL_API_KEY;
-}
+export function hasFirecrawlKey(): boolean { return !!process.env.FIRECRAWL_API_KEY; }

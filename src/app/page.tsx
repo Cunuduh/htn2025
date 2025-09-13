@@ -17,7 +17,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agents, setAgents] = useState<AgentResult[]>([]);
-  const [summaryMarkdown, setSummaryMarkdown] = useState(''); // legacy fallback if text summary ever used
+  const [summaryMarkdown, setSummaryMarkdown] = useState('');
   const [summaryObject, setSummaryObject] = useState<TrustSummary | null>(null);
   const [searchEvents, setSearchEvents] = useState<{ agent: string; query: string; ts: number; done?: boolean; sources?: { url: string; title: string; page_age?: string; encrypted_content?: string }[] }[]>([]);
   const [aborted, setAborted] = useState(false);
@@ -44,9 +44,12 @@ export default function Home() {
   const [summaryDone, setSummaryDone] = useState(false);
   const [autoScrollAgents, setAutoScrollAgents] = useState<Record<string, boolean>>({});
   const [readingLevel, setReadingLevel] = useState<ReadingLevel>('standard');
-  // Track completion per agent so we can show a summary skeleton immediately when all finish.
+  // track completion per agent
   const [doneAgents, setDoneAgents] = useState<Record<string, true>>({});
   const allAgentsDone = AGENT_SPECS.every(a => doneAgents[a.id]);
+  // summary visibility logic
+  const showSummarySkeleton = !aborted && !summaryObject && !summaryMarkdown && !summaryStarted && allAgentsDone;
+  const showSummarySection = !aborted && (summaryObject || summaryMarkdown || summaryStarted || allAgentsDone);
 
   function resetState() {
     setAgents([]);
@@ -67,7 +70,7 @@ export default function Home() {
     const controller = new AbortController();
     setStarted(true);
     abortRef.current = controller;
-    // Hoisted so finally block can always reference populated agents
+  // local map for incremental ui updates
     const agentMap: Record<string, AgentResult> = {};
     const commitAgents = () => setAgents(Object.values(agentMap));
     try {
@@ -135,7 +138,7 @@ export default function Home() {
             }
             case 'agentDone': {
               if (agentMap[evt.id] && !agentMap[evt.id].markdown.trim()) {
-                // Agent produced no output; mark placeholder
+                // ensure placeholder
                 agentMap[evt.id].markdown = '**No response** – agent finished with no output.';
                 commitAgents();
               }
@@ -160,6 +163,10 @@ export default function Home() {
               break;
             }
             case 'done': {
+              if (evt.aborted) {
+                // server signalled early abort
+                setAborted(true);
+              }
               setSummaryDone(true);
               break;
             }
@@ -171,7 +178,7 @@ export default function Home() {
         setError(err instanceof Error ? err.message : 'error');
       }
     } finally {
-      // Ensure all declared agents have a visible card with at least placeholder text.
+  // ensure placeholders for all agents
       for (const spec of AGENT_SPECS) {
         if (!agentMap[spec.id]) {
           agentMap[spec.id] = {
@@ -224,9 +231,7 @@ export default function Home() {
     return () => cancelAnimationFrame(frame);
   }, [started]);
 
-  useEffect(() => {
-    // reserved for width recalcs
-  }, [containerWidth]);
+  useEffect(() => { /* width recalcs */ }, [containerWidth]);
 
   useEffect(() => {
     const el = containerRef.current; if (!el) return;
@@ -263,7 +268,7 @@ export default function Home() {
   const baseTranslate = containerWidth ? (containerWidth / 2) - (active * (CARD_WIDTH + GAP) + CARD_WIDTH / 2) : 0;
   const translate = baseTranslate + dragOffset;
 
-  useEffect(() => { if (summaryDone && summaryRef.current) { summaryRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); } }, [summaryDone]);
+  useEffect(() => { if (summaryDone && summaryRef.current) summaryRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [summaryDone]);
 
   useEffect(() => {
     if (!started) return; let running = true; const frame = () => { if (!running) return; const sectionEl = sectionRef.current; const inputEl = inputWrapperRef.current; if (sectionEl && inputEl) { const sectionRect = sectionEl.getBoundingClientRect(); const inputRect = inputEl.getBoundingClientRect(); const originX = inputRect.left + inputRect.width / 2 - sectionRect.left; const originY = inputRect.bottom - sectionRect.top; if (originCircleRef.current) { originCircleRef.current.setAttribute('cx', originX.toString()); originCircleRef.current.setAttribute('cy', originY.toString()); } const cards: NodeListOf<HTMLElement> = sectionEl.querySelectorAll('[data-card]'); cards.forEach((card, idx) => { const line = raysRef.current[idx]; if (!line) return; const rect = card.getBoundingClientRect(); const x2 = rect.left + rect.width / 2 - sectionRect.left; const targetTop = rect.top - 3; const y2 = targetTop - sectionRect.top; line.setAttribute('x1', originX.toString()); line.setAttribute('y1', originY.toString()); line.setAttribute('x2', x2.toString()); line.setAttribute('y2', y2.toString()); }); } requestAnimationFrame(frame); }; requestAnimationFrame(frame); return () => { running = false; }; }, [started, visibleAgents.length]);
@@ -278,7 +283,7 @@ export default function Home() {
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           placeholder="Paste a news article link to get a clear breakdown."
-          className="relative bg-neutral-950/60 backdrop-blur border-white/95 focus-visible:ring-2 focus-visible:ring-white text-base md:text-lg h-14 px-6 py-4 placeholder:text-neutral-500 shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_12px_-2px_rgba(255,255,255,0.5)] rounded-xl text-neutral-100"
+          className="relative bg-neutral-950/60 backdrop-blur border-white/95 focus-visible:ring-2 focus-visible:ring-white text-base md:text-lg h-14 px-6 py-4 placeholder:text-white/40 shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_0_12px_-2px_rgba(255,255,255,0.5)] rounded-xl text-neutral-100"
         />
       </div>
       {!loading && (
@@ -349,8 +354,8 @@ export default function Home() {
       </header>
       <main className={`flex-1 flex flex-col gap-10 pb-16 ${!started ? 'items-center justify-center' : ''}`}>
         {!started && !loading && (
-          <div className="flex flex-col items-center gap-8 w-full max-w-2xl px-6 text-center">
-            {Form}
+          <div className="flex flex-col items-center gap-8 w-full px-6 text-center">
+            <div className="w-full max-w-5xl mx-auto">{Form}</div>
             {error && <p className="text-sm text-red-400">{error}</p>}
           </div>
         )}
@@ -444,7 +449,7 @@ export default function Home() {
           </div>
         </section>
         )}
-        {(summaryObject || summaryMarkdown || summaryStarted || allAgentsDone) && (
+        {showSummarySection && (
           <section ref={summaryRef} className="w-full px-6">
             <div className="max-w-5xl mx-auto">
               <Card className="bg-neutral-900 border-neutral-700 w-full overflow-hidden relative">
@@ -484,8 +489,8 @@ export default function Home() {
                     </div>
                   ) : summaryMarkdown ? (
                     <Markdown>{summaryMarkdown}</Markdown>
-                  ) : allAgentsDone ? (
-                    // Simplified large skeleton: only text lines & bullet dots (no panels/cards/buttons)
+                  ) : showSummarySkeleton ? (
+                    // summary skeleton
                     <div className="relative w-full h-[600px] flex flex-col gap-10 overflow-hidden">
                       <div className="absolute inset-0 bg-[radial-gradient(circle_at_25%_15%,rgba(255,255,255,0.07),transparent_70%)] pointer-events-none" />
                       <div className="pt-4 space-y-6">
@@ -638,12 +643,12 @@ function SearchCard({ agent, query, done }: { agent: string; query: string; done
     <div title={query} className={`rounded-md border border-neutral-700 bg-neutral-900 px-4 py-2 text-sm shadow-sm flex flex-col gap-1 w-fit max-w-xs`}> 
       <div className="flex items-center gap-2">
         <span className="text-neutral-400 text-xs uppercase tracking-wide">Search</span>
-        <span className={`h-2 w-2 rounded-full ${done ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+        <span className="text-[10px] text-neutral-500">{done ? 'done' : '…'}</span>
       </div>
       <div className="font-medium text-neutral-200 truncate">{query}</div>
       <div className="text-xs text-neutral-500">agent: {agent}</div>
       {!done && <div className="text-xs text-neutral-500 italic">Searching…</div>}
-      {done && <div className="text-xs text-neutral-500 italic">Done</div>}
+      {done && <div className="text-xs text-neutral-600 italic">Completed</div>}
     </div>
   );
 }
