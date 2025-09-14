@@ -206,7 +206,7 @@ export async function POST(req: NextRequest) {
                 const summaryPrompt = `Integrate specialist analyses below. Provide unbiased, concise output respecting schema.\n${agentOutputs.map((a) => `\n<agent id="${a.id}">\n<![CDATA[\n${a.markdown}\n]]>\n</agent>`).join('')}`;
                 const genObj: any = generateObject as any; // loose typing fallback due to build-time inference issue
                 const summaryResult: any = await genObj({
-                    model: anthropic('claude-sonnet-4-20250514'),
+                    model: anthropic('claude-opus-4-1-20250805'),
                     system: summarySystem,
                     schema: TRUST_SCHEMA,
                     messages: [{ role: 'user', content: summaryPrompt }],
