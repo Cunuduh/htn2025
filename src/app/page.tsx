@@ -635,6 +635,8 @@ export default function Home() {
                                         const agentSearches = searchEvents.filter(
                                             (se) => se.agent === card.id,
                                         );
+                                        const done = !!doneAgents[card.id];
+                                        const startedAgent = agents.some(a => a.id === card.id); // may also be placeholder from visibleAgents
                                         return (
                                             <div
                                                 key={card.id}
@@ -655,6 +657,9 @@ export default function Home() {
                                                         }))
                                                     }
                                                     searches={agentSearches}
+                                                    done={done}
+                                                    started={startedAgent}
+                                                    aborted={aborted}
                                                 />
                                             </div>
                                         );
@@ -856,6 +861,9 @@ function AnalysisCard({
     autoScroll,
     onAutoScrollToggle,
     searches,
+    done,
+    started,
+    aborted,
 }: {
     agent: AgentResult;
     color?: string;
@@ -869,6 +877,9 @@ function AnalysisCard({
         done?: boolean;
         sources?: { url: string; title: string; page_age?: string; encrypted_content?: string }[];
     }[];
+    done: boolean;
+    started: boolean;
+    aborted: boolean;
 }) {
     const base = color || '#7b5bff';
     const siteBg = '#0a0a0a';
@@ -973,7 +984,31 @@ function AnalysisCard({
                         <div className="border-t border-neutral-700/50 pt-2" />
                     </div>
                 )}
-                <Markdown>{agent.markdown}</Markdown>
+                {(!agent.markdown || !agent.markdown.trim()) && !done && !aborted ? (
+                    <div className="relative space-y-3 pb-2">
+                        <div className="shimmer-line h-4 w-5/6" />
+                        <div className="shimmer-line h-4 w-4/6" />
+                        <div className="shimmer-line h-4 w-3/5" />
+                        <div className="pt-1 space-y-2">
+                            <div className="shimmer-block h-5 w-2/5" />
+                            <div className="shimmer-line h-4 w-11/12" />
+                            <div className="shimmer-line h-4 w-10/12" />
+                        </div>
+                        <div className="pt-2 space-y-2">
+                            {Array.from({ length: 6 }).map((_, i) => (
+                                <div key={i} className="flex items-start gap-3">
+                                    <span className="shimmer-dot mt-0.5 h-3 w-3 rounded-full" />
+                                    <span
+                                        className="shimmer-line h-4 rounded flex-1"
+                                        style={{ width: `${92 - (i % 5) * 10}%` }}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <Markdown>{agent.markdown}</Markdown>
+                )}
             </CardContent>
         </Card>
     );

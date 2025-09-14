@@ -44,11 +44,11 @@ export async function runExaSearch(queries: string[]): Promise<SearchResultBundl
     const bundles: SearchResultBundle[] = [];
     for (const q of queries) {
         try {
-            const res: any = await exa.search(q, { numResults: 6 });
-            const sources: SearchSource[] = (res?.results || []).slice(0, 6).map((r: any) => ({
+            const res: any = await exa.search(q, { numResults: 2 });
+            const sources: SearchSource[] = (res?.results || []).slice(0, 1).map((r: any) => ({
                 url: r.url,
                 title: r.title,
-                snippet: r.highlights?.[0]?.snippet || r.text?.slice(0, 160),
+                snippet: r.highlights?.[0]?.snippet || r.text?.slice(0, 640),
                 publishedDate: r.publishedDate,
             }));
             bundles.push({ query: q, sources });

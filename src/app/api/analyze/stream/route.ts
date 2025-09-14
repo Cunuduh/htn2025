@@ -110,7 +110,6 @@ export async function POST(req: NextRequest) {
                                 }
                                 if (queries.length) {
                                     send({ type: 'searchQueries', agent: spec.id, queries });
-                                    await new Promise((r) => setTimeout(r, 500));
                                     const bundles = await runExaSearch(queries);
                                     if (bundles.length) {
                                         searchContext = bundles
@@ -124,10 +123,9 @@ export async function POST(req: NextRequest) {
                                                 type: 'searchResult',
                                                 agent: spec.id,
                                                 query: b.query,
-                                                sources: b.sources.slice(0, 5),
+                                                sources: b.sources,
                                             });
                                         }
-                                        // no visible search header
                                     }
                                 }
                             } catch (searchErr) {
@@ -142,16 +140,19 @@ export async function POST(req: NextRequest) {
                             xmlWrappedArticle,
                             searchContext || '<search />',
                         ].join('\n');
-                        const agentModel = cerebras('qwen-3-235b-a22b-instruct-2507');
+                        const agentModel = spec.allowSearch
+                            ? cerebras('gpt-oss-120b')
+                            : cerebras('qwen-3-235b-a22b-instruct-2507');
                         console.log('[analyze/stream] agent begin', {
                             agent: spec.id,
-                            model: 'cerebras-qwen-235b',
+                            model: spec.allowSearch ? 'cerebras-gpt-oss-120b' : 'cerebras-qwen-235b',
                         });
-                        const result = await streamText({
+                        await new Promise((r) => setTimeout(r, 500));
+                        const result = streamText({
                             model: agentModel,
                             system,
                             messages: [{ role: 'user', content: prompt }],
-                            maxRetries: 1,
+                            maxRetries: 2,
                         });
                         // buffer output
                         for await (const rawPart of result.textStream as any) {
