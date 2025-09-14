@@ -37,6 +37,24 @@ const TRUST_SCHEMA = z.object({
 });
 type TrustObject = z.infer<typeof TRUST_SCHEMA>;
 
+// Fallback sanitizer for models that sometimes echo XML wrapper tags in raw markdown
+function stripAgentXmlWrappers(text: string): string {
+    if (!text) return text;
+    // remove outer agentOutput if present without relying on full XML parse
+    // capture inner markdown cdata or content
+    const agentOutputMatch = text.match(/<agentOutput[\s\S]*?<markdown>([\s\S]*?)<\/markdown>[\s\S]*?<\/agentOutput>/i);
+    if (agentOutputMatch) {
+        text = agentOutputMatch[1];
+    }
+    // unwrap CDATA sections
+    text = text.replace(/<!\[CDATA\[/g, '').replace(/]]>/g, '');
+    // Strip any residual opening/closing tags
+    text = text.replace(/<\/?agentOutput[^>]*>/gi, '');
+    text = text.replace(/<\/?markdown[^>]*>/gi, '');
+    // Trim stray backticks or whitespace from poorly closed generations
+    return text.trim();
+}
+
 export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const url = (body?.url as string) || DEFAULT_URL;
@@ -85,7 +103,7 @@ export async function POST(req: NextRequest) {
                                 const queryGen = await generateText({
                                     model: cerebras('llama-3.3-70b'),
                                     maxRetries: 1,
-                                    prompt: `You are a news fact extraction assistant. Given the article markdown below, output ONLY XML of the form <queries><q>query 1</q><q>query 2</q><q>query 3</q></queries> with up to 3 short DISTINCT fact-check queries (5-10 words each).\nRules:\n- Output ONLY the XML. No commentary.\n- Each <q> must be unique and concise.\n---ARTICLE START---\n${articleMarkdown.slice(0, 8000)}\n---ARTICLE END---`,
+                                    prompt: `You are a news fact extraction assistant. Given the article markdown below, output ONLY XML of the form <queries><q>query 1</q><q>query 2</q><q>query 3</q></queries> with up to 3 short DISTINCT fact-check queries (5-10 words each), including keywords relating to location, date and context.\nRules:\n- Output ONLY the XML. No commentary.\n- Each <q> must be unique and concise.\n---ARTICLE START---\n${articleMarkdown.slice(0, 8000)}\n---ARTICLE END---`,
                                 });
                                 let queries: string[] = [];
                                 try {
@@ -186,6 +204,7 @@ export async function POST(req: NextRequest) {
                         } catch (parseErr) {
                             console.warn('[analyze/stream] xml parse failure', parseErr);
                         }
+                        parsedMarkdown = stripAgentXmlWrappers(parsedMarkdown);
                         console.log('[analyze/stream] agent done', {
                             agent: spec.id,
                             chars: parsedMarkdown.length,
