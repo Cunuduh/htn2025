@@ -76,10 +76,6 @@ export async function POST(req: NextRequest) {
                     let full = '';
                     let searchHeaderMarkdown: string | undefined;
                     try {
-                        // throttle search agents
-                        if (spec.allowSearch) {
-                            await new Promise((res) => setTimeout(res, 500));
-                        }
                         // two phase search
                         let searchContext = '';
                         searchHeaderMarkdown = '';
@@ -87,8 +83,8 @@ export async function POST(req: NextRequest) {
                             try {
                                 // phase 1 query generation
                                 const queryGen = await generateText({
-                                    model: cerebras('qwen-3-235b-a22b-instruct-2507'),
-                                    maxRetries: 0,
+                                    model: cerebras('llama-3.3-70b'),
+                                    maxRetries: 1,
                                     prompt: `You are a news fact extraction assistant. Given the article markdown below, output ONLY XML of the form <queries><q>query 1</q><q>query 2</q><q>query 3</q></queries> with up to 3 short DISTINCT fact-check queries (5-10 words each).\nRules:\n- Output ONLY the XML. No commentary.\n- Each <q> must be unique and concise.\n---ARTICLE START---\n${articleMarkdown.slice(0, 8000)}\n---ARTICLE END---`,
                                 });
                                 let queries: string[] = [];
@@ -114,7 +110,7 @@ export async function POST(req: NextRequest) {
                                 }
                                 if (queries.length) {
                                     send({ type: 'searchQueries', agent: spec.id, queries });
-                                    await new Promise((r) => setTimeout(r, 300));
+                                    await new Promise((r) => setTimeout(r, 500));
                                     const bundles = await runExaSearch(queries);
                                     if (bundles.length) {
                                         searchContext = bundles
