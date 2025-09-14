@@ -493,41 +493,52 @@ export default function Home() {
             >
                 <div className="h-full w-full bg-gradient-to-l from-neutral-950 via-neutral-950/80 to-transparent" />
             </div>
-            <header className="mx-auto flex w-full max-w-5xl flex-col gap-4 p-6">
-                <div className="flex flex-col gap-2">
-                    <h1 className="text-2xl font-semibold tracking-tight">Prism</h1>
-                    <div className="flex flex-wrap items-center gap-3 text-sm">
-                        <span className="text-neutral-400">Reading level:</span>
-                        <button
-                            type="button"
-                            onClick={() => setReadingLevel('standard')}
-                            className={`rounded-md border px-3 py-1 text-xs ${readingLevel === 'standard' ? 'border-neutral-600 bg-neutral-800 text-neutral-100' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
-                        >
-                            Standard
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setReadingLevel('simple')}
-                            className={`rounded-md border px-3 py-1 text-xs ${readingLevel === 'simple' ? 'border-neutral-600 bg-neutral-800 text-neutral-100' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
-                        >
-                            Simple
-                        </button>
-                        <span className="text-xs text-neutral-500">
-                            Simple = everyday words & short sentences.
-                        </span>
+            {/* Unified heading + controls cluster */}
+            <div
+                className={`pointer-events-auto relative mx-auto flex w-full max-w-5xl flex-col items-stretch px-6 transition-[padding,margin,transform,width] duration-700 ease-out gap-3 pb-2 ${started ? 'mt-4' : 'mt-20'}`}
+            >
+                <div
+                    className={`flex flex-col transition-all duration-700 ${started ? 'items-start gap-2' : 'items-center gap-4'}`}
+                >
+                    <h1
+                        className={`font-semibold tracking-tight transition-all duration-700 ${started ? 'text-2xl bg-none text-neutral-50 text-left' : 'text-5xl md:text-6xl text-center bg-gradient-to-r from-neutral-50 via-neutral-200 to-neutral-400 bg-clip-text text-transparent'}`}
+                    >
+                        Prism
+                    </h1>
+                    <div
+                        className={`flex flex-wrap items-center transition-all duration-700 self-start text-sm`}
+                    >
+                        <span className="mr-2 text-neutral-400">Reading level:</span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setReadingLevel('standard')}
+                                className={`rounded-md border px-3 py-1 text-xs transition-colors ${readingLevel === 'standard' ? 'border-neutral-600 bg-neutral-800 text-neutral-100' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
+                            >
+                                Standard
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setReadingLevel('simple')}
+                                className={`rounded-md border px-3 py-1 text-xs transition-colors ${readingLevel === 'simple' ? 'border-neutral-600 bg-neutral-800 text-neutral-100' : 'border-neutral-700 text-neutral-400 hover:text-neutral-200'}`}
+                            >
+                                Simple
+                            </button>
+                        </div>
                     </div>
                 </div>
-                {started && Form}
-                {started && error && <p className="text-sm text-red-400">{error}</p>}
-                {/* per-agent search events now rendered inside cards */}
-            </header>
+                <div className={`transition-all duration-700 ${started ? '' : ''}`}>{Form}</div>
+                {error && <p className={`text-sm text-red-400 ${started ? '' : 'text-center'}`}>{error}</p>}
+            </div>
             <main
-                className={`flex flex-1 flex-col gap-10 pb-16 ${!started ? 'items-center justify-center' : ''}`}
+                className={`flex flex-1 flex-col gap-10 pb-16 transition-all duration-700 ${started ? 'pt-4' : 'items-center justify-center pt-0'}`}
             >
                 {!started && !loading && (
-                    <div className="flex w-full flex-col items-center gap-8 px-6 text-center">
-                        <div className="mx-auto w-full max-w-5xl">{Form}</div>
-                        {error && <p className="text-sm text-red-400">{error}</p>}
+                    <div className="flex w-full flex-col items-center gap-4 px-6 text-center">
+                        <p className="max-w-xl text-balance text-sm text-neutral-400 md:text-base">
+                            Paste a news article link and we will run multiple agents to cross‑check
+                            claims and produce a trust & concern summary.
+                        </p>
                     </div>
                 )}
                 {started && (

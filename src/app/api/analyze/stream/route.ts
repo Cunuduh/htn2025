@@ -89,25 +89,32 @@ export async function POST(req: NextRequest) {
                                 const queryGen = await generateText({
                                     model: cerebras('qwen-3-235b-a22b-instruct-2507'),
                                     maxRetries: 0,
-                                    prompt: `You are a news fact extraction assistant. Given article markdown below, produce JSON {"queries":["q1","q2", ...]} with up to 3 short distinct fact-check queries (5-10 words each).\nDo NOT include commentary.\n---ARTICLE START---\n${articleMarkdown.slice(0, 8000)}\n---ARTICLE END---`,
+                                    prompt: `You are a news fact extraction assistant. Given the article markdown below, output ONLY XML of the form <queries><q>query 1</q><q>query 2</q><q>query 3</q></queries> with up to 3 short DISTINCT fact-check queries (5-10 words each).\nRules:\n- Output ONLY the XML. No commentary.\n- Each <q> must be unique and concise.\n---ARTICLE START---\n${articleMarkdown.slice(0, 8000)}\n---ARTICLE END---`,
                                 });
                                 let queries: string[] = [];
-                                const jsonMatch = queryGen.text.match(/\{[\s\S]*\}/);
-                                if (jsonMatch) {
-                                    try {
-                                        const parsed = JSON.parse(jsonMatch[0]);
-                                        if (Array.isArray(parsed.queries))
-                                            queries = parsed.queries
-                                                .slice(0, 3)
+                                try {
+                                    const xmlMatch = queryGen.text.match(/<queries[\s\S]*?<\/queries>/i);
+                                    if (xmlMatch) {
+                                        const parser = new XMLParser({ ignoreAttributes: true });
+                                        const parsed: any = parser.parse(xmlMatch[0]);
+                                        let qNodes = parsed?.queries?.q;
+                                        if (typeof qNodes === 'string') qNodes = [qNodes];
+                                        if (Array.isArray(qNodes)) {
+                                            queries = qNodes
                                                 .map((q: any) => String(q).trim())
                                                 .filter(Boolean);
-                                    } catch {}
-                                }
+                                        }
+                                    }
+                                } catch {}
+                                queries = Array.from(new Set(queries.map((q) => q.toLowerCase().trim())))
+                                    .slice(0, 3)
+                                    .map((q) => q.replace(/^["'`]|["'`]$/g, ''));
                                 if (!queries.length) {
-                                    queries = extractPossibleQueries(articleMarkdown, 3); // fallback heuristic
+                                    queries = extractPossibleQueries(articleMarkdown, 3);
                                 }
                                 if (queries.length) {
                                     send({ type: 'searchQueries', agent: spec.id, queries });
+                                    await new Promise((r) => setTimeout(r, 300));
                                     const bundles = await runExaSearch(queries);
                                     if (bundles.length) {
                                         searchContext = bundles
